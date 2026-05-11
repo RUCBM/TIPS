@@ -91,7 +91,7 @@ Run CPU-only sanity checks:
 pytest -q tests/PRM_from_ORM
 ```
 
-Expected success signal: all tests pass. In the exported environment this was verified with `11 passed`.
+Expected success signal: all tests pass. In the exported environment this was verified with `12 passed`.
 
 ## Prepare Tiny Examples
 
@@ -99,9 +99,6 @@ Prepare the tiny math fixture:
 
 ```bash
 python PRM_from_ORM/prepare_math_process_judge_data.py \
-  --scan_pro_path PRM_from_ORM/examples/math_tiny/scan_pro.parquet \
-  --processbench_dir PRM_from_ORM/examples/math_tiny/ProcessBench \
-  --template_path PRM_from_ORM/templates/math_process_judge_prompt.txt \
   --output_dir /tmp/tips_math_process_judge \
   --dev_ratio 0.0
 ```
@@ -115,7 +112,6 @@ Prepare the tiny agent fixture:
 
 ```bash
 python PRM_from_ORM/prepare_agent_process_judge_data.py \
-  --source_dir PRM_from_ORM/examples/agent_tiny/processes_agent_process_judge \
   --output_dir /tmp/tips_agent_process_judge
 ```
 

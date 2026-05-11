@@ -65,68 +65,6 @@ def _step_accuracy(pred_step_labels: dict[str, int], gt_step_labels: dict[str, i
     return correct / len(gt_step_labels) if gt_step_labels else 0.0
 
 
-def _collect_prmbench_step_stats(
-    pred_step_labels: dict[str, int],
-    gt_step_labels: dict[str, int],
-    *,
-    step_indices: list[int],
-    gt_first_error: int,
-) -> dict[str, float]:
-    tp = 0
-    fp = 0
-    tn = 0
-    fn = 0
-    correct_step_match = 0
-    correct_step_total = 0
-    wrong_step_match = 0
-    wrong_step_total = 0
-    total_step_match = 0
-
-    for idx in step_indices:
-        key = str(idx)
-        pred = pred_step_labels[key]
-        gt = gt_step_labels[key]
-        is_match = int(pred == gt)
-        total_step_match += is_match
-        if gt == 1:
-            correct_step_total += 1
-            correct_step_match += is_match
-            if pred == 1:
-                tp += 1
-            else:
-                fn += 1
-        else:
-            wrong_step_total += 1
-            wrong_step_match += is_match
-            if pred == 0:
-                tn += 1
-            else:
-                fp += 1
-
-    first_error_total = float(gt_first_error != -1)
-    first_error_match = 0.0
-    if gt_first_error != -1:
-        first_error_match = float(pred_step_labels[str(gt_first_error)] == 0)
-
-    return {
-        "prmbench_tp": float(tp),
-        "prmbench_fp": float(fp),
-        "prmbench_tn": float(tn),
-        "prmbench_fn": float(fn),
-        "prmbench_correct_step_match": float(correct_step_match),
-        "prmbench_correct_step_total": float(correct_step_total),
-        "prmbench_wrong_step_match": float(wrong_step_match),
-        "prmbench_wrong_step_total": float(wrong_step_total),
-        "prmbench_total_step_match": float(total_step_match),
-        "prmbench_total_step_total": float(len(step_indices)),
-        "prmbench_first_error_match": float(first_error_match),
-        "prmbench_first_error_total": float(first_error_total),
-        "prmbench_model_response_acc": float(
-            sum(pred_step_labels[str(idx)] for idx in step_indices) / len(step_indices) if step_indices else -1
-        ),
-    }
-
-
 def compute_score(solution_str: str, ground_truth: str, *, extra_info: dict | None = None, **_) -> dict[str, Any]:
     del ground_truth
     assert isinstance(extra_info, dict), "extra_info is required"
@@ -156,27 +94,7 @@ def compute_score(solution_str: str, ground_truth: str, *, extra_info: dict | No
         "first_error_error_total": float(gt_first_error != -1),
         "first_error_correct_match": 0.0,
         "first_error_correct_total": float(gt_first_error == -1),
-        "prmbench_tp": 0.0,
-        "prmbench_fp": 0.0,
-        "prmbench_tn": 0.0,
-        "prmbench_fn": 0.0,
-        "prmbench_correct_step_match": 0.0,
-        "prmbench_correct_step_total": 0.0,
-        "prmbench_wrong_step_match": 0.0,
-        "prmbench_wrong_step_total": 0.0,
-        "prmbench_total_step_match": 0.0,
-        "prmbench_total_step_total": 0.0,
-        "prmbench_first_error_match": 0.0,
-        "prmbench_first_error_total": 0.0,
-        "prmbench_model_response_acc": -1.0,
-        "prmbench_pair_id": "",
     }
-    if extra_info.get("benchmark_name") == "prmbench":
-        result.update(
-            {
-                "prmbench_pair_id": str(extra_info["pair_id"]),
-            }
-        )
 
     try:
         raw = _extract_json_object(solution_str)
@@ -199,15 +117,6 @@ def compute_score(solution_str: str, ground_truth: str, *, extra_info: dict | No
         result["first_error_correct_match"] = first_error_match
     else:
         result["first_error_error_match"] = first_error_match
-    if extra_info.get("benchmark_name") == "prmbench":
-        result.update(
-            _collect_prmbench_step_stats(
-                pred_step_labels,
-                gt_step_labels,
-                step_indices=step_indices,
-                gt_first_error=gt_first_error,
-            )
-        )
 
     reward_type = extra_info["reward_type"]
     if reward_type == "outcome":

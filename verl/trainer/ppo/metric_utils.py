@@ -29,15 +29,8 @@ from verl.utils.import_utils import deprecated
 logger = logging.getLogger(__name__)
 logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
 
-PRMBENCH_DATA_SOURCE_PREFIX = "MathProcessJudge/prmbench"
-PRMBENCH_CORRECT_SOURCE = f"{PRMBENCH_DATA_SOURCE_PREFIX}/correct"
 AGENT_PROCESS_BENCH_DATA_SOURCE_PREFIX = "AgentProcessBench"
 AGENT_PROCESS_BENCH_EVAL_MANIFEST_NAME = "agentprocessbench_eval_manifest.json"
-PRMBENCH_CLASSIFICATION_GROUPS = {
-    "simplicity": ("redundency", "circular"),
-    "soundness": ("counterfactual", "step_contradiction", "domain_inconsistency", "confidence"),
-    "sensitivity": ("missing_condition", "deception", "multi_solutions"),
-}
 
 
 @deprecated("verl.utils.metric.reduce_metrics")
@@ -243,18 +236,6 @@ def average_flat_metrics_by_data_source_group(
     return averaged_metrics
 
 
-def map_prmbench_source_to_group(source: str) -> Optional[str]:
-    if not source.startswith(f"{PRMBENCH_DATA_SOURCE_PREFIX}/"):
-        return None
-    classification = source[len(PRMBENCH_DATA_SOURCE_PREFIX) + 1 :]
-    if classification in {"correct", "overall"} or "/" in classification:
-        return None
-    for group_name, classifications in PRMBENCH_CLASSIFICATION_GROUPS.items():
-        if classification in classifications:
-            return f"{PRMBENCH_DATA_SOURCE_PREFIX}/{group_name}"
-    raise ValueError(f"Unknown PRMBench classification: {classification}")
-
-
 def _safe_ratio(numerator: float, denominator: float) -> float:
     return float(numerator / denominator) if denominator > 0 else -1.0
 
@@ -311,145 +292,6 @@ def collect_agent_process_bench_metrics_by_data_source(
                 }
             )
 
-    return metrics_by_source
-
-
-def summarize_prmbench_metrics(
-    *,
-    tp: float,
-    fp: float,
-    tn: float,
-    fn: float,
-    correct_step_match: float,
-    correct_step_total: float,
-    wrong_step_match: float,
-    wrong_step_total: float,
-    total_step_match: float,
-    total_step_total: float,
-    first_error_match: float,
-    first_error_total: float,
-    classification: str,
-) -> dict[str, float]:
-    precision = _safe_ratio(tp, tp + fp)
-    recall = _safe_ratio(tp, tp + fn)
-    f1 = -1.0 if precision < 0 or recall < 0 or precision + recall == 0 else 2 * precision * recall / (precision + recall)
-
-    negative_precision = _safe_ratio(tn, tn + fn)
-    negative_recall = _safe_ratio(tn, tn + fp)
-    negative_f1 = (
-        -1.0
-        if negative_precision < 0 or negative_recall < 0 or negative_precision + negative_recall == 0
-        else 2 * negative_precision * negative_recall / (negative_precision + negative_recall)
-    )
-
-    prm_score = f1 if classification == "multi_solutions" else 0.5 * (f1 + negative_f1)
-    if prm_score < 0:
-        prm_score = 0.0
-
-    return {
-        "precision": float(precision),
-        "recall": float(recall),
-        "f1": float(f1),
-        "negative_precision": float(negative_precision),
-        "negative_recall": float(negative_recall),
-        "negative_f1": float(negative_f1),
-        "prm_score": float(prm_score),
-        "correct_step_acc": _safe_ratio(correct_step_match, correct_step_total),
-        "wrong_step_acc": _safe_ratio(wrong_step_match, wrong_step_total),
-        "total_step_acc": _safe_ratio(total_step_match, total_step_total),
-        "first_error_acc": _safe_ratio(first_error_match, first_error_total),
-    }
-
-
-def collect_prmbench_metrics_by_data_source(
-    data_sources: list[str] | np.ndarray,
-    infos_dict: dict[str, list[Any]],
-) -> dict[str, dict[str, float]]:
-    required = (
-        "prmbench_tp",
-        "prmbench_fp",
-        "prmbench_tn",
-        "prmbench_fn",
-        "prmbench_correct_step_match",
-        "prmbench_correct_step_total",
-        "prmbench_wrong_step_match",
-        "prmbench_wrong_step_total",
-        "prmbench_total_step_match",
-        "prmbench_total_step_total",
-        "prmbench_first_error_match",
-        "prmbench_first_error_total",
-    )
-    if any(key not in infos_dict for key in required):
-        return {}
-
-    data_sources = np.asarray(data_sources, dtype=object)
-    metrics_by_source: dict[str, dict[str, float]] = {}
-
-    for source in np.unique(data_sources):
-        source = str(source)
-        if not source.startswith(f"{PRMBENCH_DATA_SOURCE_PREFIX}/"):
-            continue
-        mask = data_sources == source
-        classification = source.split("/")[-1]
-        metrics_by_source[source] = summarize_prmbench_metrics(
-            tp=float(np.asarray(infos_dict["prmbench_tp"], dtype=np.float64)[mask].sum()),
-            fp=float(np.asarray(infos_dict["prmbench_fp"], dtype=np.float64)[mask].sum()),
-            tn=float(np.asarray(infos_dict["prmbench_tn"], dtype=np.float64)[mask].sum()),
-            fn=float(np.asarray(infos_dict["prmbench_fn"], dtype=np.float64)[mask].sum()),
-            correct_step_match=float(np.asarray(infos_dict["prmbench_correct_step_match"], dtype=np.float64)[mask].sum()),
-            correct_step_total=float(np.asarray(infos_dict["prmbench_correct_step_total"], dtype=np.float64)[mask].sum()),
-            wrong_step_match=float(np.asarray(infos_dict["prmbench_wrong_step_match"], dtype=np.float64)[mask].sum()),
-            wrong_step_total=float(np.asarray(infos_dict["prmbench_wrong_step_total"], dtype=np.float64)[mask].sum()),
-            total_step_match=float(np.asarray(infos_dict["prmbench_total_step_match"], dtype=np.float64)[mask].sum()),
-            total_step_total=float(np.asarray(infos_dict["prmbench_total_step_total"], dtype=np.float64)[mask].sum()),
-            first_error_match=float(np.asarray(infos_dict["prmbench_first_error_match"], dtype=np.float64)[mask].sum()),
-            first_error_total=float(np.asarray(infos_dict["prmbench_first_error_total"], dtype=np.float64)[mask].sum()),
-            classification=classification,
-        )
-
-    return metrics_by_source
-
-
-def collect_prmbench_similarity_by_data_source(
-    data_sources: list[str] | np.ndarray,
-    infos_dict: dict[str, list[Any]],
-) -> dict[str, dict[str, float]]:
-    required = ("prmbench_pair_id", "prmbench_model_response_acc")
-    if any(key not in infos_dict for key in required):
-        return {}
-
-    data_sources = np.asarray(data_sources, dtype=object)
-    pair_ids = np.asarray(infos_dict["prmbench_pair_id"], dtype=object)
-    model_response_acc = np.asarray(infos_dict["prmbench_model_response_acc"], dtype=np.float64)
-
-    correct_response_acc_by_pair_id: dict[str, list[float]] = defaultdict(list)
-    for idx, source in enumerate(data_sources):
-        if str(source) == PRMBENCH_CORRECT_SOURCE and model_response_acc[idx] != -1:
-            correct_response_acc_by_pair_id[str(pair_ids[idx])].append(float(model_response_acc[idx]))
-
-    averaged_correct_response_acc = {
-        pair_id: float(np.mean(accs)) for pair_id, accs in correct_response_acc_by_pair_id.items()
-    }
-
-    similarity_values_by_source: dict[str, list[float]] = defaultdict(list)
-    for idx, source in enumerate(data_sources):
-        source = str(source)
-        if not source.startswith(f"{PRMBENCH_DATA_SOURCE_PREFIX}/") or source == PRMBENCH_CORRECT_SOURCE:
-            continue
-        pair_id = str(pair_ids[idx])
-        if pair_id in averaged_correct_response_acc and model_response_acc[idx] != -1:
-            similarity_values_by_source[source].append(
-                abs(float(model_response_acc[idx]) - averaged_correct_response_acc[pair_id])
-            )
-
-    metrics_by_source = {
-        source: {"similarity": float(np.mean(vals))} for source, vals in similarity_values_by_source.items()
-    }
-    overall_similarity_values = [val for vals in similarity_values_by_source.values() for val in vals]
-    if overall_similarity_values:
-        metrics_by_source[f"{PRMBENCH_DATA_SOURCE_PREFIX}/overall"] = {
-            "similarity": float(np.mean(overall_similarity_values))
-        }
     return metrics_by_source
 
 

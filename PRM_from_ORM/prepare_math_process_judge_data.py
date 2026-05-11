@@ -164,12 +164,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--scan_pro_path",
-        default="./PRM_from_ORM/scan_pro.parquet",
+        default="./PRM_from_ORM/examples/math_tiny/scan_pro.parquet",
         help="Local path to scan_pro parquet.",
     )
     parser.add_argument(
         "--processbench_dir",
-        default="./PRM_from_ORM/ProcessBench",
+        default="./PRM_from_ORM/examples/math_tiny/ProcessBench",
         help="Directory containing ProcessBench json files.",
     )
     parser.add_argument(

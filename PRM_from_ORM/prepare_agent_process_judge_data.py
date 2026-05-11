@@ -334,7 +334,7 @@ def main() -> None:
     parser.add_argument(
         "--source_dir",
         type=Path,
-        default=Path("PRM_from_ORM/processes_agent_process_judge"),
+        default=Path("PRM_from_ORM/examples/agent_tiny/processes_agent_process_judge"),
         help="Directory containing agent_train_orm/ and AgentProcessBench/.",
     )
     parser.add_argument(
