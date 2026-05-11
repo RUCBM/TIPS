@@ -92,7 +92,7 @@ Run CPU-only sanity checks:
 pytest -q tests/PRM_from_ORM
 ```
 
-Expected success signal: all tests pass. In the exported environment this was verified with `12 passed`.
+Expected success signal: all tests pass. In the exported environment this was verified with `13 passed`.
 
 ## Prepare Tiny Examples
 
