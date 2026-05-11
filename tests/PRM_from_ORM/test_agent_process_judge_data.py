@@ -10,9 +10,15 @@ sys.path.insert(0, REPO_ROOT)
 
 from PRM_from_ORM.prepare_agent_process_judge_data import (
     DATASETS,
+    DEFAULT_SYSTEM_TEMPLATE_PATH,
+    DEFAULT_USER_TEMPLATE_PATH,
     convert_record,
+    load_prompt_templates,
     prepare_agent_process_judge_data,
 )
+
+
+SYSTEM_TEMPLATE, USER_TEMPLATE = load_prompt_templates(DEFAULT_SYSTEM_TEMPLATE_PATH, DEFAULT_USER_TEMPLATE_PATH)
 
 
 def _record(*, step_labels=None, final_label=1):
@@ -42,6 +48,8 @@ def test_train_outcome_only_record_allows_missing_step_labels():
         dataset="bfcl",
         split="train",
         require_step_labels=False,
+        system_template=SYSTEM_TEMPLATE,
+        user_template=USER_TEMPLATE,
     )
 
     assert row["data_source"] == "AgentProcessBench/bfcl"
@@ -54,7 +62,24 @@ def test_train_outcome_only_record_allows_missing_step_labels():
 
 def test_eval_record_requires_step_labels():
     with pytest.raises(AssertionError, match="eval rows must contain step_labels"):
-        convert_record(_record(step_labels=None), dataset="bfcl", split="val", require_step_labels=True)
+        convert_record(
+            _record(step_labels=None),
+            dataset="bfcl",
+            split="val",
+            require_step_labels=True,
+            system_template=SYSTEM_TEMPLATE,
+            user_template=USER_TEMPLATE,
+        )
+
+
+def test_agent_user_template_requires_trajectory_placeholder(tmp_path):
+    system_template_path = tmp_path / "system.txt"
+    user_template_path = tmp_path / "user.txt"
+    system_template_path.write_text("system", encoding="utf-8")
+    user_template_path.write_text("missing placeholder", encoding="utf-8")
+
+    with pytest.raises(AssertionError, match="__TRAJECTORY_JSON__"):
+        load_prompt_templates(system_template_path, user_template_path)
 
 
 def test_prepare_agent_process_judge_data_writes_expected_parquets(tmp_path):

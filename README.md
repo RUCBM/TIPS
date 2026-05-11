@@ -1,8 +1,6 @@
 # TIPS: Thinking-Induced Process Supervision
 
-This repository contains a minimal, runnable release of **TIPS** (**T**hinking-**I**nduced **P**rocess **S**upervision), an outcome-only reinforcement learning framework for inducing process reward model (PRM) behavior from generative reward models.
-
-The release keeps the full `verl/` runtime from source commit `000c8e56` and overlays only the PRM-related changes needed by the math and agent examples. Large generated data, checkpoints, logs, cache directories, private paths, and API keys are intentionally not included.
+This repository contains a runnable release of **TIPS** (**T**hinking-**I**nduced **P**rocess **S**upervision), an outcome-only reinforcement learning framework for inducing process reward model (PRM) behavior from generative reward models.
 
 ## What We Do
 
@@ -70,7 +68,10 @@ PRM_from_ORM/
   eval_math_process_judge.py
   run_math_process_judge_grpo.sh
   run_agent_process_judge_grpo.sh
-  templates/math_process_judge_prompt.txt
+  templates/
+    math_process_judge_prompt.txt
+    agent_process_judge_system_prompt.txt
+    agent_process_judge_user_prompt.txt
   examples/
     math_tiny/
     agent_tiny/
@@ -121,6 +122,8 @@ Expected outputs:
 - `/tmp/tips_agent_process_judge/agentprocessbench_bfcl_eval.parquet`
 - `/tmp/tips_agent_process_judge/agentprocessbench_eval_manifest.json`
 
+Agent prompt templates live under `PRM_from_ORM/templates/` and can be overridden with `--system_template_path` and `--user_template_path`.
+
 ## GRPO Training Launch
 
 Training requires the normal `verl` GPU stack, a model, and generated parquet files. The launch scripts are intentionally kept in this release and parameterized through environment variables. They fail fast if `MODEL_PATH` or `TRAIN_FILES` is missing.
@@ -146,43 +149,6 @@ bash PRM_from_ORM/run_agent_process_judge_grpo.sh
 ```
 
 For smoke-test style validation-only runs, append `trainer.val_only=True trainer.val_before_train=True`.
-
-### Long-Running Training Notes
-
-Full GRPO runs can take hours to days depending on model size, GPU count, sequence length, and rollout settings. Progress can be monitored from the terminal running the script, or by logging to a file and using:
-
-```bash
-tail -f /path/to/train.log
-watch -n 5 nvidia-smi
-```
-
-Success criteria:
-
-- The process exits with code 0.
-- Checkpoints appear under `OUTPUT_DIR`.
-- Validation metrics are printed in the console/log.
-
-Failure handling:
-
-- Stop a stuck local run with `Ctrl-C`, or use `pkill -f verl.trainer.main_ppo` if it was launched in the background.
-- Resume from an existing checkpoint with `trainer.resume_mode=resume_path trainer.resume_from_path=/path/to/checkpoint`.
-- Remove incomplete generated rollout/checkpoint directories only after confirming they are not needed.
-
-## Release Scope
-
-Included:
-
-- Full `verl/` runtime needed by `python -m verl.trainer.main_ppo`.
-- PRM-from-ORM data preparation scripts for math and agent tasks.
-- Parameterized GRPO launch scripts.
-- Tiny local examples and CPU tests.
-
-Not included:
-
-- Full training/evaluation datasets.
-- Generated parquet files beyond tiny fixtures.
-- Checkpoints, logs, rollout dumps, cache directories, and paper plotting artifacts.
-- Private paths or API keys.
 
 ## Notes
 

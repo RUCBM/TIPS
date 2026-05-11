@@ -9,93 +9,24 @@ from typing import Any
 import pandas as pd
 
 
-JUDGE_RUBRIC = """You are a strict but fair trajectory annotator for tool-use agents.
-
-You will be given one complete trajectory consisting of system, user, assistant,
-and tool messages, together with the tool definitions.
-
-Your task is to label EACH assistant message (each assistant message constitutes
-one Step) using the following scheme:
-
-+1: Correct and effective.
-    The step is factually correct given the information available at that time
-    and clearly moves the task closer to successful completion by:
-    (i) correctly invoking a tool or interpreting tool outputs, or
-    (ii) introducing valid constraints, decisions, or information that
-         reduces the remaining uncertainty of the task.
-
- 0: Neutral or exploratory.
-    The step is reasonable but has limited or unclear impact on task progress.
-    This includes exploratory reasoning, redundant restatements, partial planning,
-    or cases where the correctness is debatable given the available evidence.
-    Tool calls that fail due to external reasons (e.g., timeout, 404), when the
-    attempt itself is reasonable, are typically labeled 0.
-
--1: Incorrect or harmful.
-    The step contains factual errors, misinterprets tool outputs, violates
-    constraints, repeats failed actions without a meaningful change in strategy,
-    fabricates tool results or evidence, or otherwise pushes the trajectory away
-    from successful completion.
-
-Important rules:
-
-- Only assistant messages are labeled. User and tool messages serve only as evidence.
-- Avoid hindsight bias: judge each step strictly based on the information available
-  up to that point in the trajectory.
-- Any step labeled -1 triggers a cumulative penalty: all subsequent assistant steps
-  in the same workflow should also be labeled -1, unless one of the following holds:
-    (i) the assistant explicitly acknowledges and corrects the earlier mistake, or
-    (ii) the assistant produces a subsequent step that no longer depends on the
-         incorrect assumption and effectively resumes progress toward the task.
-- Repeating the same failed action without a meaningful change in parameters or
-  strategy typically transitions from 0 to -1.
-- If an incorrect statement does not affect any subsequent reasoning or actions
-  and is not relied upon later, it may be labeled 0; otherwise, it should be labeled -1.
-- Any violation of the policies or requirements specified in the system prompt results in a score of −1, except
-  for certain output-formatting norms. The following behaviors are considered acceptable and do not incur penalties:
-  providing a text response simultaneously with a tool call, not conducting reasoning before a tool call, failing to
-  encapsulate reasoning content within `<think>...</think>` tags, responding to the user while executing a function
-  call, or executing multiple parallel tool calls.
-- A score of +1 is assigned if the entire conversation is initiated by the assistant and its first message is a
-  greeting; this exemption applies only to the first message.
-- Upon user request, if the assistant executes specific instructions, a score of +1 shall be awarded, notwithstanding
-  any deviation from the overarching objective.
-
-After labeling all assistant steps, also assign a label to:
-
-FINAL_RESULT:
-+1: The overall task is successfully completed.
--1: The task fails due to incorrect reasoning, tool misuse, or unresolved errors.
-
-Output format:
-You MUST first provide your reasoning process, analyzing each assistant step one by one.
-Then, at the very end, output a JSON object wrapped in ```json ... ``` markdown code block as your judgement results."""
-
-
-USER_INSTRUCTIONS = """Label every index in assistant_message_indices.
-
-First, analyze each assistant message step by step.
-After your reasoning, output the final JSON result wrapped in ```json ... ``` markdown code block.
-
-JSON schema:
-{
-  "step_labels": {"<assistant_index>": -1|0|1, ...},
-  "final_label": -1|1,
-  "explanations": {
-    "steps": {"<assistant_index>": "short reason for humans", ...},
-    "final": "short reason for humans"
-  }
-}
-
-Rules:
-- step_labels MUST contain ALL assistant indices (as strings).
-- explanations.steps MUST contain ALL assistant indices (as strings).
-- Keep each explanation concise (<= 2 sentences).
-"""
-
-
 DATASETS = ("bfcl", "gaia_dev", "hotpotqa", "tau2")
 EVAL_MANIFEST_NAME = "agentprocessbench_eval_manifest.json"
+DEFAULT_SYSTEM_TEMPLATE_PATH = Path("PRM_from_ORM/templates/agent_process_judge_system_prompt.txt")
+DEFAULT_USER_TEMPLATE_PATH = Path("PRM_from_ORM/templates/agent_process_judge_user_prompt.txt")
+
+
+def load_template(template_path: Path) -> str:
+    assert template_path.is_file(), f"missing prompt template: {template_path}"
+    template = template_path.read_text(encoding="utf-8").strip()
+    assert template, f"empty prompt template: {template_path}"
+    return template
+
+
+def load_prompt_templates(system_template_path: Path, user_template_path: Path) -> tuple[str, str]:
+    system_template = load_template(system_template_path)
+    user_template = load_template(user_template_path)
+    assert "__TRAJECTORY_JSON__" in user_template, "user template must contain __TRAJECTORY_JSON__"
+    return system_template, user_template
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -165,7 +96,15 @@ def first_neg1_index(step_labels: dict[str, int] | None) -> int:
     return min(wrong_indices) if wrong_indices else -1
 
 
-def build_judge_prompt(item: dict[str, Any], assistant_indices: list[int]) -> list[dict[str, str]]:
+def build_judge_prompt(
+    item: dict[str, Any],
+    assistant_indices: list[int],
+    *,
+    system_template: str,
+    user_template: str,
+) -> list[dict[str, str]]:
+    assert system_template.strip(), "system_template must be non-empty"
+    assert "__TRAJECTORY_JSON__" in user_template, "user_template must contain __TRAJECTORY_JSON__"
     messages = item.get("messages")
     assert isinstance(messages, list), "item['messages'] must be a list"
     assert all(0 <= idx < len(messages) for idx in assistant_indices), "assistant index out of range"
@@ -184,16 +123,25 @@ def build_judge_prompt(item: dict[str, Any], assistant_indices: list[int]) -> li
             "output_requirements": "Return JSON with step_labels, final_label, explanations.",
         },
     }
+    trajectory_json = json.dumps(payload, ensure_ascii=False)
     return [
-        {"role": "system", "content": JUDGE_RUBRIC},
+        {"role": "system", "content": system_template},
         {
             "role": "user",
-            "content": USER_INSTRUCTIONS + "\n\nTRAJECTORY_JSON:\n" + json.dumps(payload, ensure_ascii=False),
+            "content": user_template.replace("__TRAJECTORY_JSON__", trajectory_json),
         },
     ]
 
 
-def convert_record(item: dict[str, Any], *, dataset: str, split: str, require_step_labels: bool) -> dict[str, Any]:
+def convert_record(
+    item: dict[str, Any],
+    *,
+    dataset: str,
+    split: str,
+    require_step_labels: bool,
+    system_template: str,
+    user_template: str,
+) -> dict[str, Any]:
     assert split in {"train", "val"}, f"unexpected split: {split}"
     required_keys = {"messages", "final_label", "question", "data_source", "total_index"}
     missing = required_keys - set(item)
@@ -202,7 +150,12 @@ def convert_record(item: dict[str, Any], *, dataset: str, split: str, require_st
     assistant_indices = _assistant_message_indices(item["messages"])
     step_labels = _normalize_step_labels(item.get("step_labels"), assistant_indices, required=require_step_labels)
     final_label = normalize_final_label(item["final_label"])
-    prompt = build_judge_prompt(item, assistant_indices)
+    prompt = build_judge_prompt(
+        item,
+        assistant_indices,
+        system_template=system_template,
+        user_template=user_template,
+    )
 
     data_source = f"AgentProcessBench/{dataset}"
     extra_info = {
@@ -243,18 +196,35 @@ def _write_parquet(rows: Iterable[dict[str, Any]], output_path: Path) -> int:
     return len(df)
 
 
-def prepare_agent_process_judge_data(source_dir: Path, output_dir: Path) -> dict[str, int]:
+def prepare_agent_process_judge_data(
+    source_dir: Path,
+    output_dir: Path,
+    *,
+    system_template_path: Path = DEFAULT_SYSTEM_TEMPLATE_PATH,
+    user_template_path: Path = DEFAULT_USER_TEMPLATE_PATH,
+) -> dict[str, int]:
     train_dir = source_dir / "agent_train_orm"
     eval_dir = source_dir / "AgentProcessBench"
     assert train_dir.is_dir(), f"missing train dir: {train_dir}"
     assert eval_dir.is_dir(), f"missing eval dir: {eval_dir}"
+    system_template, user_template = load_prompt_templates(system_template_path, user_template_path)
 
     counts: dict[str, int] = {}
     train_rows: list[dict[str, Any]] = []
     for dataset in DATASETS:
         path = train_dir / f"{dataset}.jsonl"
         rows = _read_jsonl(path)
-        converted = [convert_record(row, dataset=dataset, split="train", require_step_labels=False) for row in rows]
+        converted = [
+            convert_record(
+                row,
+                dataset=dataset,
+                split="train",
+                require_step_labels=False,
+                system_template=system_template,
+                user_template=user_template,
+            )
+            for row in rows
+        ]
         counts[f"train/{dataset}"] = len(converted)
         train_rows.extend(converted)
     counts["train/total"] = _write_parquet(train_rows, output_dir / "agent_train_orm.parquet")
@@ -263,7 +233,17 @@ def prepare_agent_process_judge_data(source_dir: Path, output_dir: Path) -> dict
     for dataset in DATASETS:
         path = eval_dir / dataset / "test.jsonl"
         rows = _read_jsonl(path)
-        converted = [convert_record(row, dataset=dataset, split="val", require_step_labels=True) for row in rows]
+        converted = [
+            convert_record(
+                row,
+                dataset=dataset,
+                split="val",
+                require_step_labels=True,
+                system_template=system_template,
+                user_template=user_template,
+            )
+            for row in rows
+        ]
         output_name = f"agentprocessbench_{dataset}_eval.parquet"
         counts[f"eval/{dataset}"] = _write_parquet(
             converted,
@@ -344,6 +324,18 @@ def main() -> None:
         help="Directory to write parquet files.",
     )
     parser.add_argument(
+        "--system_template_path",
+        type=Path,
+        default=DEFAULT_SYSTEM_TEMPLATE_PATH,
+        help="System prompt template path.",
+    )
+    parser.add_argument(
+        "--user_template_path",
+        type=Path,
+        default=DEFAULT_USER_TEMPLATE_PATH,
+        help="User prompt template path. Must contain __TRAJECTORY_JSON__.",
+    )
+    parser.add_argument(
         "--tokenizer_path",
         type=Path,
         default=None,
@@ -357,7 +349,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    counts = prepare_agent_process_judge_data(args.source_dir, args.output_dir)
+    counts = prepare_agent_process_judge_data(
+        args.source_dir,
+        args.output_dir,
+        system_template_path=args.system_template_path,
+        user_template_path=args.user_template_path,
+    )
     for key in sorted(counts):
         print(f"{key}: {counts[key]}")
 

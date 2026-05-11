@@ -1,0 +1,22 @@
+Label every index in assistant_message_indices.
+
+First, analyze each assistant message step by step.
+After your reasoning, output the final JSON result wrapped in ```json ... ``` markdown code block.
+
+JSON schema:
+{
+  "step_labels": {"<assistant_index>": -1|0|1, ...},
+  "final_label": -1|1,
+  "explanations": {
+    "steps": {"<assistant_index>": "short reason for humans", ...},
+    "final": "short reason for humans"
+  }
+}
+
+Rules:
+- step_labels MUST contain ALL assistant indices (as strings).
+- explanations.steps MUST contain ALL assistant indices (as strings).
+- Keep each explanation concise (<= 2 sentences).
+
+TRAJECTORY_JSON:
+__TRAJECTORY_JSON__
