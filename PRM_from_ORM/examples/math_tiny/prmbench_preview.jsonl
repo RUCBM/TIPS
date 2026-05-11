@@ -1,1 +1,0 @@
-{"classification": "redundency", "idx": "redundency_1", "original_question": "Compute 1+1.", "modified_question": "Compute 1+1.", "original_process": ["1+1=2"], "modified_process": ["1+1=3"], "modified_steps": [1], "error_steps": [1], "reason": "toy example"}

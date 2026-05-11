@@ -9,9 +9,7 @@ import pandas as pd
 
 SCAN_PRO_DATA_SOURCE = "MathProcessJudge/scan_pro"
 PROCESSBENCH_DATA_SOURCE_PREFIX = "MathProcessJudge/processbench"
-PRMBENCH_DATA_SOURCE_PREFIX = "MathProcessJudge/prmbench"
 DEFAULT_PROCESSBENCH_CONFIGS = ("gsm8k", "math", "olympiadbench", "omnimath")
-PRMBENCH_CORRECT_SAMPLE_CLASSIFICATION = "redundency"
 
 
 def load_template(template_path: str) -> str:
@@ -46,19 +44,6 @@ def processbench_step_labels(num_steps: int, label: int) -> dict[str, int]:
     if label == -1:
         return {str(idx): 1 for idx in range(num_steps)}
     return {str(idx): int(idx < label) for idx in range(num_steps)}
-
-
-def prmbench_step_labels(num_steps: int, error_steps: list[int]) -> dict[str, int]:
-    error_step_indices = {int(step) - 1 for step in error_steps}
-    return {str(idx): int(idx not in error_step_indices) for idx in range(num_steps)}
-
-
-def prmbench_pair_id(item: dict) -> str:
-    classification = str(item["classification"])
-    idx = str(item["idx"])
-    prefix = f"{classification}_"
-    assert idx.startswith(prefix), f"PRMBench idx must start with {prefix}, got {idx}"
-    return idx[len(prefix) :]
 
 
 def build_rl_row(
@@ -149,74 +134,6 @@ def load_scan_pro_rows(scan_pro_path: str, template: str) -> list[dict]:
     return rows
 
 
-def load_prmbench_rows(prmbench_path: str, template: str) -> list[dict]:
-    rows: list[dict] = []
-    correct_pair_ids: set[str] = set()
-
-    with open(prmbench_path, "r", encoding="utf-8") as f:
-        for idx, line in enumerate(f):
-            item = json.loads(line)
-            classification = str(item["classification"])
-            pair_id = prmbench_pair_id(item)
-
-            if classification == PRMBENCH_CORRECT_SAMPLE_CLASSIFICATION and pair_id not in correct_pair_ids:
-                correct_steps = [str(step) for step in item["original_process"]]
-                correct_step_labels = {str(step_idx): 1 for step_idx in range(len(correct_steps))}
-                rows.append(
-                    build_rl_row(
-                        data_source=f"{PRMBENCH_DATA_SOURCE_PREFIX}/correct",
-                        split="eval",
-                        index=len(rows),
-                        problem=str(item["original_question"]),
-                        steps=correct_steps,
-                        step_labels=correct_step_labels,
-                        final_label=1,
-                        template=template,
-                        dataset_name="prmbench",
-                        reward_type="process",
-                        extra_info={
-                            "benchmark_name": "prmbench",
-                            "classification": "correct",
-                            "pair_id": pair_id,
-                            "source_item_idx": str(item["idx"]),
-                            "modified_steps": [],
-                            "error_steps": [],
-                            "reason": str(item["reason"]),
-                        },
-                    )
-                )
-                correct_pair_ids.add(pair_id)
-
-            steps = [str(step) for step in item["modified_process"]]
-            error_steps = [int(step) for step in item["error_steps"]]
-            step_labels = prmbench_step_labels(len(steps), error_steps)
-            rows.append(
-                build_rl_row(
-                    data_source=f"{PRMBENCH_DATA_SOURCE_PREFIX}/{classification}",
-                    split="eval",
-                    index=len(rows),
-                    problem=str(item["modified_question"]),
-                    steps=steps,
-                    step_labels=step_labels,
-                    final_label=int(step_labels[str(len(steps) - 1)]),
-                    template=template,
-                    dataset_name="prmbench",
-                    reward_type="process",
-                    extra_info={
-                        "benchmark_name": "prmbench",
-                        "classification": classification,
-                        "pair_id": pair_id,
-                        "source_item_idx": str(item["idx"]),
-                        "modified_steps": [int(step) for step in item["modified_steps"]],
-                        "error_steps": error_steps,
-                        "reason": str(item["reason"]),
-                    },
-                )
-            )
-
-    return rows
-
-
 def train_dev_split(rows: list[dict], dev_ratio: float, seed: int) -> tuple[list[dict], list[dict]]:
     indices = list(range(len(rows)))
     rng = random.Random(seed)
@@ -256,11 +173,6 @@ if __name__ == "__main__":
         help="Directory containing ProcessBench json files.",
     )
     parser.add_argument(
-        "--prmbench_path",
-        default="./PRM_from_ORM/prmbench_preview.jsonl",
-        help="Directory containing PRMBench json files.",
-    )
-    parser.add_argument(
         "--template_path",
         default="./PRM_from_ORM/templates/math_process_judge_prompt.txt",
         help="Prompt template path.",
@@ -287,19 +199,15 @@ if __name__ == "__main__":
     scan_rows = load_scan_pro_rows(args.scan_pro_path, template)
     scan_train_rows, scan_dev_rows = train_dev_split(scan_rows, dev_ratio=args.dev_ratio, seed=args.seed)
     processbench_rows = load_processbench_rows(args.processbench_dir, template, configs=args.processbench_configs)
-    prmbench_rows = load_prmbench_rows(args.prmbench_path, template)
 
     scan_train_path = os.path.join(args.output_dir, "scan_pro_train.parquet")
     scan_dev_path = os.path.join(args.output_dir, "scan_pro_dev.parquet")
     processbench_eval_path = os.path.join(args.output_dir, "processbench_eval.parquet")
-    prmbench_eval_path = os.path.join(args.output_dir, "prmbench_eval.parquet")
 
     save_rows(scan_train_rows, scan_train_path)
     save_rows(scan_dev_rows, scan_dev_path)
     save_rows(processbench_rows, processbench_eval_path)
-    save_rows(prmbench_rows, prmbench_eval_path)
 
     print(f"scan_pro_train: {scan_train_path} ({len(scan_train_rows)})")
     print(f"scan_pro_dev: {scan_dev_path} ({len(scan_dev_rows)})")
     print(f"processbench_eval: {processbench_eval_path} ({len(processbench_rows)})")
-    print(f"prmbench_eval: {prmbench_eval_path} ({len(prmbench_rows)})")

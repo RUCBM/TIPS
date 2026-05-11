@@ -101,7 +101,6 @@ Prepare the tiny math fixture:
 python PRM_from_ORM/prepare_math_process_judge_data.py \
   --scan_pro_path PRM_from_ORM/examples/math_tiny/scan_pro.parquet \
   --processbench_dir PRM_from_ORM/examples/math_tiny/ProcessBench \
-  --prmbench_path PRM_from_ORM/examples/math_tiny/prmbench_preview.jsonl \
   --template_path PRM_from_ORM/templates/math_process_judge_prompt.txt \
   --output_dir /tmp/tips_math_process_judge \
   --dev_ratio 0.0
@@ -111,7 +110,6 @@ Expected outputs:
 
 - `/tmp/tips_math_process_judge/scan_pro_train.parquet`
 - `/tmp/tips_math_process_judge/processbench_eval.parquet`
-- `/tmp/tips_math_process_judge/prmbench_eval.parquet`
 
 Prepare the tiny agent fixture:
 
