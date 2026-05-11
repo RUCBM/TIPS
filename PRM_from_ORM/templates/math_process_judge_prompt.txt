@@ -1,0 +1,32 @@
+The following is a math problem and a solution split into paragraphs and indexed from 0.
+
+[Math Problem]
+__PROBLEM__
+
+[Solution]
+__TAGGED_RESPONSE__
+
+Your task is to judge the solution paragraph by paragraph.
+
+First, think through the solution carefully and identify where the reasoning first becomes invalid.
+
+Then output a JSON object with:
+- "step_labels": a mapping from paragraph index to 1 or 0
+  - 1 means the paragraph is correct and remains logically valid given the previous paragraphs.
+  - 0 means the paragraph is incorrect, unsupported, or depends on an earlier incorrect paragraph.
+- "final_label": 1 if the final answer of the whole solution is correct, otherwise 0.
+
+Rules:
+- You must reason before the final JSON.
+- "step_labels" must contain every paragraph index exactly once.
+- Use only 1 or 0 for every label.
+- If an earlier paragraph is wrong and a later paragraph relies on it, that later paragraph should also be 0.
+- The final output must end with a ```json``` code block containing only the final JSON object.
+
+JSON schema:
+```json
+{
+  "step_labels": {"0": 1, "1": 1, "2": 0},
+  "final_label": 0
+}
+```
