@@ -1,21 +1,32 @@
-# TIPS: Thinking-Induced Process Supervision
+# Inducing Process Supervision from Outcome-Only Reinforcement Learning
+
 
 This repository contains a runnable release of **TIPS** (**T**hinking-**I**nduced **P**rocess **S**upervision), an outcome-only reinforcement learning framework for inducing process reward model (PRM) behavior from generative reward models.
 
+[![TIPS overview](figs/TIPS2.png)](figs/TIPS2.pdf)
+
+*Overview of TIPS.*
+
 ## What We Do
 
-Process reward models provide step-level feedback for mathematical reasoning traces and multi-turn agent trajectories, but collecting human or Monte Carlo step labels is expensive. TIPS starts from a simple observation: when an LLM is used as an outcome reward model, its generated thought often already contains latent process verification. The model may inspect intermediate steps, locate the first invalid step, and then derive the final trajectory-level label.
-
-TIPS strengthens this latent behavior with outcome-only RL. Given a candidate trajectory, the model is prompted to first generate a thinking chain and then output both step-level labels and an outcome label. During GRPO training, only the correctness of the outcome label is used as reward. Rollouts that verify intermediate steps more accurately are more likely to predict the correct outcome, so outcome supervision becomes an implicit selector for useful process-verification reasoning.
+TIPS turns outcome supervision into step-level process verification without human or Monte Carlo step labels. It trains a generative reward model to reason over a trajectory and predict both step-level and outcome labels, while rewarding only outcome correctness. This outcome-only signal selects reasoning patterns that accurately verify intermediate steps, producing a process reward model with substantially cheaper supervision.
 
 The release covers two domains:
 
-- **Math process judging**: convert math/process datasets into `verl` RL parquet format and train/evaluate a generative judge.
-- **Agent process judging**: convert AgentProcessBench-style trajectories into outcome-supervised RL data and evaluate first-error localization.
+- **Math reward modeling**: convert math/process datasets into `verl` RL parquet format and train/evaluate a generative reward model.
+- **Agent reward modeling**: convert agent trajectories into outcome-supervised RL data and evaluate first-error localization.
+
+## Released Artifacts
+
+- [TIPS Training Data](https://huggingface.co/datasets/XingYing-stack/TIPS-Training-Data)
+- [TIPS-Qwen3-4B-Instruct-2507-Math](https://huggingface.co/XingYing-stack/TIPS-Qwen3-4B-Instruct-2507-Math)
+- [TIPS-Qwen3-4B-Thinking-2507-Math](https://huggingface.co/XingYing-stack/TIPS-Qwen3-4B-Thinking-2507-Math)
+- [TIPS-Qwen3-4B-Instruct-2507-Agent](https://huggingface.co/XingYing-stack/TIPS-Qwen3-4B-Instruct-2507-Agent)
+- [TIPS-Qwen3-4B-Thinking-2507-Agent](https://huggingface.co/XingYing-stack/TIPS-Qwen3-4B-Thinking-2507-Agent)
 
 ## Main Results
 
-The full paper evaluates TIPS on mathematical reasoning and agent tasks across Qwen, LLaMA, DeepSeek-distilled, and SmolLM backbones. This repository contains the minimal runnable code path and tiny examples; it does not include the full experimental datasets or checkpoints.
+The full paper evaluates TIPS on mathematical reasoning and agent tasks across Qwen, LLaMA, DeepSeek-distilled, and SmolLM backbones. This repository contains the minimal runnable code path and tiny examples; the released training data and checkpoints are hosted on Hugging Face above.
 
 ### Math Best-of-8 Reranking
 
@@ -150,6 +161,10 @@ bash PRM_from_ORM/run_agent_process_judge_grpo.sh
 
 For smoke-test style validation-only runs, append `trainer.val_only=True trainer.val_before_train=True`.
 
-## Notes
+## Acknowledgements
 
-The tiny examples are designed to verify code paths, not to reproduce paper numbers. To reproduce the full experiments, prepare the corresponding math and AgentProcessBench data, select the backbone model, run the GRPO scripts with the desired hardware settings, and evaluate using the same benchmark protocols described in the paper.
+This project is built upon [verl](https://github.com/volcengine/verl). We sincerely thank the verl team and community for their great work! We also thank the teams behind [ProcessBench](https://github.com/QwenLM/ProcessBench), [AgentProcessBench](https://github.com/RUCBM/AgentProcessBench), and [SCAN](https://scan-prm.github.io/) for making their work and resources available.
+
+## License
+
+This project is licensed under [Apache-2.0](LICENSE). Upstream verl attribution is included in [NOTICE](NOTICE).
